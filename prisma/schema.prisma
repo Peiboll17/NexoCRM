@@ -1,0 +1,224 @@
+// ============================================================
+// NexoCRM — Modelo de datos relacional (normalizado)
+// ------------------------------------------------------------
+// Relaciones clave (regla de oro):
+//  - Un Contacto pertenece opcionalmente a UNA Empresa (companyId)
+//  - Un Contacto puede estar vinculado a MÚLTIPLES Negocios (Deal.contactId)
+//  - Las Actividades se enlazan a contacto y/o negocio (cronología omnicanal)
+//  - Las Tareas tienen responsable (assignedTo) y fecha límite
+//  - Los Stages conforman el embudo (pipeline) personalizable
+// ------------------------------------------------------------
+// SQLite en sandbox: los enums se modelan como String validados en la API.
+// Migración a PostgreSQL: cambiar provider a "postgresql" + url.
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Usuarios del CRM con jerarquía RBAC
+/// role: "ADMIN" | "SALES_DIRECTOR" | "SALES_REP"
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("SALES_REP")
+  quota        Float?   // objetivo/cuota MENSUAL en EUR (null = sin objetivo)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  companiesOwned Company[]
+  contactsOwned  Contact[]
+  dealsOwned     Deal[]
+  activities     Activity[]
+  tasksAssigned  Task[]
+  notifications  Notification[]
+}
+
+/// Empresas / cuentas (organizaciones)
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  legalName String?
+  website   String?
+  sector    String?
+  address   String?
+  city      String?
+  country   String?
+  phone     String?
+  notes     String?
+  ownerId   String?
+  owner     User?    @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contacts   Contact[]
+  deals      Deal[]
+  tasks      Task[]
+  activities Activity[]
+}
+
+/// Contactos (personas físicas) — un contacto → 0..1 empresa, 0..N negocios
+model Contact {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String?
+  email     String?
+  phone     String?
+  position  String?
+  linkedin  String?
+  notes     String?
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  ownerId   String?
+  owner     User?    @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deals      Deal[]
+  activities Activity[]
+  tasks      Task[]
+}
+
+/// Etapas del embudo (pipeline personalizable)
+model Stage {
+  id          String  @id @default(cuid())
+  name        String
+  order       Int
+  probability Int     @default(50) // % probabilidad → previsión ponderada
+  color       String  @default("#64748b")
+  isWon       Boolean @default(false)
+  isLost      Boolean @default(false)
+  deals       Deal[]
+}
+
+/// Negocios / oportunidades activas
+/// status: "OPEN" | "WON" | "LOST"
+model Deal {
+  id                String    @id @default(cuid())
+  title             String
+  amount            Float     @default(0)
+  currency          String    @default("EUR")
+  status            String    @default("OPEN")
+  expectedCloseDate DateTime?
+  closedAt          DateTime?
+  source            String?
+  stageId           String?
+  stage             Stage?    @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  companyId         String?
+  company           Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contactId         String?
+  contact           Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  ownerId           String?
+  owner             User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  activities Activity[]
+  tasks      Task[]
+}
+
+/// Actividades / interacciones omnicanal
+/// type: "CALL" | "EMAIL" | "MEETING" | "NOTE" | "SUPPORT" | "SYSTEM"
+model Activity {
+  id          String   @id @default(cuid())
+  type        String
+  subject     String
+  description String?
+  occurredAt  DateTime @default(now())
+  contactId   String?
+  contact     Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  dealId      String?
+  deal        Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([contactId, occurredAt])
+  @@index([dealId, occurredAt])
+}
+
+/// Tareas — acciones futuras con fecha límite y responsable
+/// status: "PENDING" | "DONE" · priority: "LOW" | "MEDIUM" | "HIGH"
+model Task {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  dueDate      DateTime?
+  status       String    @default("PENDING")
+  priority     String    @default("MEDIUM")
+  assignedToId String?
+  assignedTo   User?     @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  contactId    String?
+  contact      Contact?  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  dealId       String?
+  deal         Deal?     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  companyId    String?
+  company      Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+/// Motor de automatización: gatillos y acciones
+/// trigger: "DEAL_CREATED" | "DEAL_STAGE_CHANGED" | "DEAL_WON" | "DEAL_LOST"
+/// actionType: "CREATE_TASK" | "LOG_ACTIVITY" | "SEND_EMAIL"
+/// Configs se guardan como JSON en String (compatible SQLite/PostgreSQL)
+model AutomationRule {
+  id           String   @id @default(cuid())
+  name         String
+  trigger      String
+  triggerStage String? // solo para DEAL_STAGE_CHANGED: restringe a una etapa destino
+  actionType   String
+  actionConfig String   @default("{}")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  logs AutomationLog[]
+}
+
+/// Notificaciones in-app (bandeja de la campana)
+/// type: "WEEKLY_RANKING" | "QUOTA_REACHED" | "SYSTEM"
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String    @default("SYSTEM")
+  title     String
+  body      String
+  payload   String    @default("{}") // JSON: ranking semanal, métricas, etc.
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+}
+
+/// Registro de alertas automáticas enviadas (dedupe: 1 por semana ISO)
+model AlertLog {
+  id        String   @id @default(cuid())
+  weekStart DateTime @unique // lunes de la semana cubierta
+  kind      String   @default("WEEKLY_RANKING")
+  payload   String   @default("{}")
+  createdAt DateTime @default(now())
+}
+
+/// Registro de ejecución de automatizaciones (auditoría)
+model AutomationLog {
+  id        String          @id @default(cuid())
+  ruleId    String?
+  rule      AutomationRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  dealId    String?
+  message   String
+  createdAt DateTime        @default(now())
+
+  @@index([createdAt])
+}
