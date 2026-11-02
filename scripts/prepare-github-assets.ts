@@ -1,8 +1,8 @@
 // 1) Copia las capturas a docs/screenshots/ optimizadas a 1200px de ancho (PNG)
 // 2) Genera THIRDPARTY-NOTICES.md escaneando node_modules/**/package.json
-const sharp = require("/home/z/my-project/node_modules/sharp");
-const fs = require("fs");
-const path = require("path");
+import sharp from "sharp";
+import fs from "fs";
+import path from "path";
 
 const ROOT = "/home/z/my-project";
 const SHOTS = "/tmp/shots";
@@ -71,11 +71,11 @@ function repoUrl(p) {
 }
 
 async function genNotices() {
-  const found = new Map();
+  const found = new Map<string, any>();
   collectPackages(path.join(ROOT, "node_modules"), found);
   const pkgs = [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
 
-  const byLicense = {};
+  const byLicense: Record<string, number> = {};
   for (const p of pkgs) {
     const lic = (typeof p.license === "string" ? p.license : p.license?.type) ?? "SEE LICENSE IN PACKAGE";
     byLicense[lic] = (byLicense[lic] ?? 0) + 1;
