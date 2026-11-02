@@ -23,6 +23,24 @@ Está diseñado con principios MVP: cero fricción de arranque (SQLite + un coma
 
 ---
 
+## 📸 Capturas de pantalla
+
+| Dashboard | Reporte por comercial |
+|---|---|
+| <img src="docs/screenshots/dashboard.png" width="100%" alt="Dashboard con KPIs, embudo y oportunidades"/> | <img src="docs/screenshots/report-comercial.png" width="100%" alt="Reporte por comercial con cuota y cumplimiento"/> |
+
+| Pipeline Kanban | Reportes de equipo |
+|---|---|
+| <img src="docs/screenshots/pipeline.png" width="100%" alt="Pipeline Kanban arrastrando negocios"/> | <img src="docs/screenshots/reports-team.png" width="100%" alt="Reportes de equipo con ranking"/> |
+
+| Contactos y timeline | Automatizaciones |
+|---|---|
+| <img src="docs/screenshots/contacts.png" width="100%" alt="Contactos con timeline omnicanal"/> | <img src="docs/screenshots/automations.png" width="100%" alt="Motor de automatizaciones"/> |
+
+> Más vistas en [`docs/screenshots/`](./docs/screenshots): login, tareas y gestión de usuarios con cuotas.
+
+---
+
 ## ✨ Funcionalidades
 
 ### 📊 Dashboard y reportes
@@ -211,3 +229,5 @@ La documentación técnica completa está en [`docs/`](./docs):
 ## 📄 Licencia
 
 Distribuido bajo la [Licencia MIT](./LICENSE).
+
+Las dependencias de terceros y sus licencias están documentadas en [THIRDPARTY-NOTICES.md](./THIRDPARTY-NOTICES.md) (564 paquetes: MIT, ISC, Apache-2.0, BSD…).
